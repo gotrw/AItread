@@ -488,6 +488,9 @@
       <div class="nav-item" data-page="backtest">
         <span class="icon">🔬</span><span>Backtest Lab</span>
       </div>
+      <div class="nav-item" data-page="learning">
+        <span class="icon">🧠</span><span>Self-Learning</span>
+      </div>
       <div class="nav-item" data-page="logs">
         <span class="icon">📋</span><span>Logs</span>
       </div>
@@ -1126,6 +1129,63 @@
       </div>
     </div>
 
+    <!-- ─────────── LEARNING PAGE ─────────────────────── -->
+    <div class="page" id="page-learning">
+      <!-- Threshold + Rolling Win Rate cards -->
+      <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">
+        <div class="kpi" id="learnKpiMode">
+          <div class="glow"></div>
+          <div class="kpi-label">Threshold Mode</div>
+          <div class="kpi-val" id="learnThresholdMode">–</div>
+          <div class="kpi-sub" id="learnThresholdSub">min_confidence</div>
+          <div class="kpi-icon">🎚️</div>
+        </div>
+        <div class="kpi cyan" id="learnKpiWin">
+          <div class="glow"></div>
+          <div class="kpi-label">Rolling Win Rate</div>
+          <div class="kpi-val" id="learnWinRate">–</div>
+          <div class="kpi-sub">Last 50 journal trades</div>
+          <div class="kpi-icon">🎯</div>
+        </div>
+        <div class="kpi" id="learnKpiTotal">
+          <div class="glow"></div>
+          <div class="kpi-label">Total Journal Trades</div>
+          <div class="kpi-val" id="learnTotalTrades">–</div>
+          <div class="kpi-sub">Logged outcomes</div>
+          <div class="kpi-icon">📓</div>
+        </div>
+      </div>
+
+      <!-- Strategy Weights -->
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+          <div class="card-title" style="margin-bottom:0;flex:1">🏋️ Strategy Weights</div>
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="loadLearning()">↻ Refresh</button>
+        </div>
+        <div id="learnWeightsWrap">
+          <div class="empty"><div class="em-icon">⏳</div>Loading…</div>
+        </div>
+      </div>
+
+      <!-- Trade Journal -->
+      <div class="card">
+        <div class="card-title">📓 Trade Journal (recent 50)</div>
+        <div style="overflow-x:auto">
+          <table class="trade-table" id="learnJournalTable">
+            <thead>
+              <tr>
+                <th>Time</th><th>Strategy</th><th>Regime</th>
+                <th>Conf</th><th>PnL%</th><th>Result</th><th>Exit Reason</th>
+              </tr>
+            </thead>
+            <tbody id="learnJournalBody">
+              <tr><td colspan="7" style="text-align:center;color:var(--text3)">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
   </div><!-- end main -->
 </div><!-- end app -->
 
@@ -1155,6 +1215,7 @@ const pageTitles = {
   dashboard:'Dashboard', signals:'Signals', analytics:'Analytics',
   trading:'Bot Control', history:'Trade History',
   settings:'Settings', backtest:'Backtest Lab', logs:'Logs',
+  learning:'Self-Learning',
 };
 
 function navigate(page) {
@@ -1167,6 +1228,7 @@ function navigate(page) {
   if (page === 'logs') refreshLogs();
   if (page === 'signals') { refreshSignals(); refreshRiskEvents(); }
   if (page === 'analytics') loadAnalytics();
+  if (page === 'learning') loadLearning();
 }
 
 document.querySelectorAll('.nav-item').forEach(item => {
@@ -1998,6 +2060,97 @@ async function init() {
   // Poll signals and positions every 60s
   setInterval(refreshSignals, 60000);
   setInterval(refreshPositions, 30000);
+}
+
+// ─────────────────────────────────────────────────────
+// Self-Learning
+// ─────────────────────────────────────────────────────
+async function loadLearning() {
+  let data;
+  try {
+    data = await api('GET', '/learning');
+  } catch(e) {
+    toast('Failed to load learning data: ' + e.message, 'error');
+    return;
+  }
+
+  // Threshold card
+  const th = data.threshold || {};
+  const mode = th.mode || '–';
+  const confVal = th.min_confidence !== undefined ? th.min_confidence.toFixed(2) : '–';
+  document.getElementById('learnThresholdMode').textContent = mode.toUpperCase();
+  document.getElementById('learnThresholdSub').textContent = 'min_confidence: ' + confVal;
+  const modeEl = document.getElementById('learnKpiMode');
+  modeEl.classList.toggle('cyan', mode === 'normal');
+  modeEl.style.borderColor = mode === 'conservative' ? 'var(--danger)' : '';
+
+  // Rolling win rate
+  const wr = data.rolling_win_rate;
+  const wrEl = document.getElementById('learnWinRate');
+  wrEl.textContent = wr !== null && wr !== undefined ? wr.toFixed(1) + '%' : '–';
+  wrEl.style.color = wr === null ? '' : wr >= 55 ? 'var(--green)' : wr <= 45 ? 'var(--danger)' : 'var(--yellow)';
+
+  // Total trades
+  document.getElementById('learnTotalTrades').textContent = data.total_journal_trades ?? '–';
+
+  // Weights table
+  const wrap = document.getElementById('learnWeightsWrap');
+  const weights = data.weights || {};
+  const keys = Object.keys(weights);
+  if (keys.length === 0) {
+    wrap.innerHTML = '<div class="empty"><div class="em-icon">📭</div>No learned weights yet – weights appear after the first tuning cycle.</div>';
+  } else {
+    let rows = '';
+    for (const key of keys.sort()) {
+      const w = weights[key];
+      const weight = typeof w === 'object' ? w.weight : w;
+      const winRate = typeof w === 'object' && w.win_rate !== undefined ? (w.win_rate * 100).toFixed(1) + '%' : '–';
+      const samples = typeof w === 'object' && w.samples !== undefined ? w.samples : '–';
+      const bar = typeof weight === 'number' ? Math.min(100, ((weight - 0.5) / 2.5) * 100).toFixed(0) : 0;
+      const color = weight >= 2 ? 'var(--green)' : weight <= 0.8 ? 'var(--danger)' : 'var(--yellow)';
+      rows += `<tr>
+        <td style="font-family:JetBrains Mono;font-size:11px">${key}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="flex:1;background:var(--surface2);border-radius:3px;height:6px;overflow:hidden">
+              <div style="width:${bar}%;height:100%;background:${color};border-radius:3px"></div>
+            </div>
+            <span style="font-family:JetBrains Mono;color:${color};font-size:12px">${typeof weight === 'number' ? weight.toFixed(3) : weight}</span>
+          </div>
+        </td>
+        <td style="text-align:center">${winRate}</td>
+        <td style="text-align:center">${samples}</td>
+      </tr>`;
+    }
+    wrap.innerHTML = `<table class="trade-table">
+      <thead><tr><th>Key (strategy/regime)</th><th>Weight</th><th>Win Rate</th><th>Samples</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  }
+
+  // Journal table
+  const body = document.getElementById('learnJournalBody');
+  const journal = data.journal || [];
+  if (journal.length === 0) {
+    body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3)">No journal entries yet.</td></tr>';
+  } else {
+    body.innerHTML = journal.map(t => {
+      const win = t.win === true;
+      const pnl = typeof t.pnl_pct === 'number' ? (t.pnl_pct >= 0 ? '+' : '') + t.pnl_pct.toFixed(2) + '%' : '–';
+      const pnlColor = typeof t.pnl_pct === 'number' ? (t.pnl_pct >= 0 ? 'var(--green)' : 'var(--danger)') : '';
+      const ts = t.timestamp ? t.timestamp.split('T').join(' ').split('.')[0] : '–';
+      const conf = typeof t.confidence === 'number' ? t.confidence.toFixed(2) : '–';
+      return `<tr>
+        <td style="font-family:JetBrains Mono;font-size:10px">${ts}</td>
+        <td>${t.strategy || '–'}</td>
+        <td>${t.regime || '–'}</td>
+        <td style="text-align:center">${conf}</td>
+        <td style="text-align:center;color:${pnlColor};font-family:JetBrains Mono">${pnl}</td>
+        <td style="text-align:center"><span class="badge ${win ? 'badge-green' : 'badge-red'}">${win ? 'WIN' : 'LOSS'}</span></td>
+        <td style="font-size:11px">${t.exit_reason || '–'}</td>
+      </tr>`;
+    }).join('');
+  }
 }
 
 init();

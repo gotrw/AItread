@@ -726,6 +726,68 @@ async def get_risk_events(limit: int = 50) -> dict:
 
 
 # ─────────────────────────────────────────────────────────────
+# Self-Learning data
+# ─────────────────────────────────────────────────────────────
+_WEIGHTS_PATH = PROJECT_ROOT / "logs" / "learned_weights.json"
+_THRESHOLD_PATH = PROJECT_ROOT / "logs" / "learned_threshold.json"
+_JOURNAL_PATH = PROJECT_ROOT / "logs" / "trade_journal.jsonl"
+
+
+@app.get("/api/v1/learning")
+async def get_learning(limit: int = 50) -> dict:
+    """Return self-learning state: strategy weights, threshold, and recent journal entries."""
+    # Weights
+    weights: dict = {}
+    if _WEIGHTS_PATH.exists():
+        try:
+            weights = json.loads(_WEIGHTS_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    # Threshold
+    threshold: dict = {}
+    if _THRESHOLD_PATH.exists():
+        try:
+            threshold = json.loads(_THRESHOLD_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    # Trade journal – recent entries + rolling win rate
+    journal: list = []
+    rolling_win_rate: Optional[float] = None
+    total_journal_trades = 0
+    if _JOURNAL_PATH.exists():
+        try:
+            lines = _JOURNAL_PATH.read_text(encoding="utf-8", errors="replace").splitlines()
+            parsed: list = []
+            for line in lines:
+                line = line.strip()
+                if line:
+                    try:
+                        parsed.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+            total_journal_trades = len(parsed)
+            # Rolling win rate over last 50 trades
+            recent = parsed[-50:] if len(parsed) > 50 else parsed
+            if recent:
+                wins = sum(1 for t in recent if t.get("win", False))
+                rolling_win_rate = round(wins / len(recent) * 100, 1)
+            # Return last `limit` for display
+            journal = list(reversed(parsed[-limit:]))
+        except Exception:
+            pass
+
+    return {
+        "weights": weights,
+        "threshold": threshold,
+        "journal": journal,
+        "rolling_win_rate": rolling_win_rate,
+        "total_journal_trades": total_journal_trades,
+    }
+
+
+# ─────────────────────────────────────────────────────────────
 # Entry point
 # ─────────────────────────────────────────────────────────────
 if __name__ == "__main__":
