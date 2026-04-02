@@ -1,0 +1,35 @@
+# Per-symbol config override for BTC/USDT
+# Values here override the global config.yaml for this symbol only.
+# Omit a key to inherit the global default.
+
+# Futures settings for BTC/USDT
+futures:
+  leverage: 5
+  margin_type: isolated
+
+# Strategy override: BTC/USDT uses regime-aware multi-strategy
+strategy:
+  active: multi_strategy
+  multi_strategy:
+    strategies:
+      - trend_follow
+      - breakout
+      - volatility
+    min_votes: 2
+    regime_aware: true
+  trend_follow:
+    fast_ema: 9
+    slow_ema: 21
+    rsi_buy_threshold: 52
+    rsi_sell_threshold: 48
+  breakout:
+    lookback: 24
+    atr_period: 14
+    atr_multiplier: 1.5
+
+# Risk override for BTC/USDT
+risk:
+  max_risk_per_trade_pct: 1.0
+  stop_loss_pct: 1.5
+  take_profit_pct: 3.0
+  max_exposure_per_symbol_pct: 30
