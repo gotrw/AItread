@@ -204,7 +204,23 @@ class BotWorker:
             "entry_time": now_utc().isoformat(),
             "value": fill_price * qty,
             "leverage": self._leverage,
+            "sl_order_id": "",
+            "tp_order_id": "",
         }
+
+        # For live futures brokers, place exchange-side SL/TP orders
+        if hasattr(self._broker, "place_bracket_orders"):
+            bracket = await asyncio.get_event_loop().run_in_executor(
+                None,
+                self._broker.place_bracket_orders,
+                self.symbol,
+                side,
+                qty,
+                sl_price,
+                tp_price,
+            )
+            self._open_position["sl_order_id"] = bracket.get("sl_order_id", "")
+            self._open_position["tp_order_id"] = bracket.get("tp_order_id", "")
         logger.info(
             "[%s] OPENED %s qty=%.6f @ %.4f SL=%.4f TP=%.4f lev=%dx",
             self.symbol, side.upper(), qty, fill_price, sl_price, tp_price, self._leverage,
@@ -277,6 +293,20 @@ class BotWorker:
 
         # Place closing order
         close_side = "sell" if side == "long" else "buy"
+
+        # For live futures brokers, cancel exchange-side bracket orders first
+        # to avoid orphan reduceOnly orders conflicting with the market close
+        if hasattr(self._broker, "cancel_bracket_orders"):
+            sl_oid = pos.get("sl_order_id", "")
+            tp_oid = pos.get("tp_order_id", "")
+            await asyncio.get_event_loop().run_in_executor(
+                None,
+                self._broker.cancel_bracket_orders,
+                self.symbol,
+                sl_oid,
+                tp_oid,
+            )
+
         order = await asyncio.get_event_loop().run_in_executor(
             None, self._broker.place_market_order, self.symbol, close_side, qty
         )

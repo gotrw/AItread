@@ -6,7 +6,10 @@ Extends LiveBroker with futures-specific operations:
 - Set margin type (isolated / cross)
 - Fetch liquidation price and margin info
 - Place long/short market orders with proper side mapping
+- Place exchange-side stop-loss / take-profit bracket orders after entry
+- Cancel bracket orders before closing a position
 - Monitor funding rate
+- Pre-flight connectivity and credential check on startup
 
 Requires a futures-enabled CCXT exchange (e.g. binanceusdm).
 API credentials must be supplied via environment variables:
@@ -18,7 +21,7 @@ import logging
 from typing import Any
 
 from execution.base import BrokerBase, Order, OrderSide
-from execution.live_broker import LiveBroker
+from execution.live_broker import LiveBroker, _with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -54,12 +57,35 @@ class FuturesBroker(LiveBroker):
             exchange_cfg.get("testnet"),
         )
 
+        # Verify credentials if provided
+        if exchange_cfg.get("api_key") and exchange_cfg.get("api_secret"):
+            self._preflight_check()
+
+    # ── Pre-flight ─────────────────────────────────────────────
+
+    def _preflight_check(self) -> None:
+        """Verify exchange connectivity and that credentials are valid.
+
+        Raises RuntimeError if the exchange cannot be reached or credentials
+        are rejected.  Called automatically by __init__ when credentials are
+        provided.
+        """
+        try:
+            _with_retry(lambda: self._exchange.fetch_balance())
+            logger.info("[FUTURES] Pre-flight check passed — credentials OK.")
+        except Exception as exc:
+            raise RuntimeError(
+                f"FuturesBroker pre-flight check failed: {exc}\n"
+                "Verify MIRA_API_KEY and MIRA_API_SECRET are correct and that "
+                "the account has futures trading enabled."
+            ) from exc
+
     # ── Futures-specific methods ───────────────────────────────
 
     def set_leverage(self, symbol: str, leverage: int) -> bool:
         """Set leverage for a symbol.  Returns True on success."""
         try:
-            self._exchange.set_leverage(leverage, symbol)
+            _with_retry(lambda: self._exchange.set_leverage(leverage, symbol))
             logger.info("[FUTURES] Set leverage=%d for %s", leverage, symbol)
             return True
         except Exception as exc:
@@ -69,7 +95,9 @@ class FuturesBroker(LiveBroker):
     def set_margin_type(self, symbol: str, margin_type: str = "isolated") -> bool:
         """Set margin type: 'isolated' or 'cross'.  Returns True on success."""
         try:
-            self._exchange.set_margin_mode(margin_type.upper(), symbol)
+            _with_retry(
+                lambda: self._exchange.set_margin_mode(margin_type.upper(), symbol)
+            )
             logger.info("[FUTURES] Set margin_type=%s for %s", margin_type, symbol)
             return True
         except Exception as exc:
@@ -84,7 +112,7 @@ class FuturesBroker(LiveBroker):
             position_side, entry_price, contracts
         """
         try:
-            positions = self._exchange.fetch_positions([symbol])
+            positions = _with_retry(lambda: self._exchange.fetch_positions([symbol]))
             for pos in positions:
                 if pos.get("symbol") == symbol and float(pos.get("contracts", 0) or 0) != 0:
                     return {
@@ -103,7 +131,7 @@ class FuturesBroker(LiveBroker):
     def get_funding_rate(self, symbol: str) -> float:
         """Fetch the current funding rate for a symbol (0.0001 = 0.01%)."""
         try:
-            funding = self._exchange.fetch_funding_rate(symbol)
+            funding = _with_retry(lambda: self._exchange.fetch_funding_rate(symbol))
             rate = float(funding.get("fundingRate") or 0)
             logger.debug("[FUTURES] Funding rate for %s: %.6f", symbol, rate)
             return rate
@@ -119,38 +147,149 @@ class FuturesBroker(LiveBroker):
         """Open a short (sell) position."""
         return self.place_market_order(symbol, "sell", qty)
 
+    def place_bracket_orders(
+        self,
+        symbol: str,
+        side: str,
+        qty: float,
+        sl_price: float,
+        tp_price: float,
+    ) -> dict[str, str]:
+        """Place exchange-side stop-loss and take-profit orders after entry.
+
+        These orders are placed with ``reduceOnly=True`` so they can only
+        close an existing position, never open a new one.  Both use
+        STOP_MARKET / TAKE_PROFIT_MARKET order types (supported by Binance
+        USDM futures and most CCXT-compatible futures exchanges).
+
+        Parameters
+        ----------
+        symbol:
+            Trading pair, e.g. 'BTC/USDT'.
+        side:
+            'long' or 'short' — the direction of the *open* position.
+            The bracket orders will be placed on the opposite side.
+        qty:
+            Position size in base asset.
+        sl_price:
+            Stop-loss trigger price.
+        tp_price:
+            Take-profit trigger price.
+
+        Returns
+        -------
+        dict with keys 'sl_order_id' and 'tp_order_id' (empty strings on
+        failure so callers always get a consistent shape).
+        """
+        close_side = "sell" if side == "long" else "buy"
+        result: dict[str, str] = {"sl_order_id": "", "tp_order_id": ""}
+
+        # Stop-loss (STOP_MARKET)
+        try:
+            raw_sl = _with_retry(
+                lambda: self._exchange.create_order(
+                    symbol,
+                    "STOP_MARKET",
+                    close_side,
+                    qty,
+                    params={"stopPrice": sl_price, "reduceOnly": True},
+                )
+            )
+            result["sl_order_id"] = str(raw_sl.get("id", ""))
+            logger.info(
+                "[FUTURES] SL order placed for %s @ %.4f (id=%s)",
+                symbol,
+                sl_price,
+                result["sl_order_id"],
+            )
+        except Exception as exc:
+            logger.warning("Failed to place SL order for %s: %s", symbol, exc)
+
+        # Take-profit (TAKE_PROFIT_MARKET)
+        try:
+            raw_tp = _with_retry(
+                lambda: self._exchange.create_order(
+                    symbol,
+                    "TAKE_PROFIT_MARKET",
+                    close_side,
+                    qty,
+                    params={"stopPrice": tp_price, "reduceOnly": True},
+                )
+            )
+            result["tp_order_id"] = str(raw_tp.get("id", ""))
+            logger.info(
+                "[FUTURES] TP order placed for %s @ %.4f (id=%s)",
+                symbol,
+                tp_price,
+                result["tp_order_id"],
+            )
+        except Exception as exc:
+            logger.warning("Failed to place TP order for %s: %s", symbol, exc)
+
+        return result
+
+    def cancel_bracket_orders(
+        self, symbol: str, sl_order_id: str, tp_order_id: str
+    ) -> None:
+        """Cancel outstanding exchange-side SL and TP orders.
+
+        Should be called before placing a market close order to avoid
+        conflicting reduceOnly orders that could be rejected or leave
+        orphan orders on the exchange.
+        """
+        for order_id, label in [(sl_order_id, "SL"), (tp_order_id, "TP")]:
+            if order_id:
+                try:
+                    _with_retry(lambda oid=order_id: self._exchange.cancel_order(oid, symbol))
+                    logger.info(
+                        "[FUTURES] Cancelled %s order %s for %s", label, order_id, symbol
+                    )
+                except Exception as exc:
+                    # Order may have already been triggered/filled — log and continue
+                    logger.warning(
+                        "Could not cancel %s order %s for %s: %s",
+                        label,
+                        order_id,
+                        symbol,
+                        exc,
+                    )
+
     def close_long(self, symbol: str, qty: float) -> Order:
         """Close a long position by selling."""
         logger.info("[FUTURES] Closing long %s qty=%.6f", symbol, qty)
-        raw = self._exchange.create_market_order(
-            symbol, "sell", qty, params={"reduceOnly": True}
+        raw = _with_retry(
+            lambda: self._exchange.create_market_order(
+                symbol, "sell", qty, params={"reduceOnly": True}
+            )
         )
         return Order(
             order_id=str(raw.get("id", "")),
             symbol=symbol,
             side="sell",
             qty=qty,
-            price=raw.get("average") or raw.get("price") or 0.0,
+            price=float(raw.get("average") or raw.get("price") or 0.0),
             status="filled" if raw.get("status") == "closed" else "open",
-            filled_qty=raw.get("filled", 0.0),
-            filled_price=raw.get("average") or raw.get("price") or 0.0,
+            filled_qty=float(raw.get("filled") or 0.0),
+            filled_price=float(raw.get("average") or raw.get("price") or 0.0),
         )
 
     def close_short(self, symbol: str, qty: float) -> Order:
         """Close a short position by buying."""
         logger.info("[FUTURES] Closing short %s qty=%.6f", symbol, qty)
-        raw = self._exchange.create_market_order(
-            symbol, "buy", qty, params={"reduceOnly": True}
+        raw = _with_retry(
+            lambda: self._exchange.create_market_order(
+                symbol, "buy", qty, params={"reduceOnly": True}
+            )
         )
         return Order(
             order_id=str(raw.get("id", "")),
             symbol=symbol,
             side="buy",
             qty=qty,
-            price=raw.get("average") or raw.get("price") or 0.0,
+            price=float(raw.get("average") or raw.get("price") or 0.0),
             status="filled" if raw.get("status") == "closed" else "open",
-            filled_qty=raw.get("filled", 0.0),
-            filled_price=raw.get("average") or raw.get("price") or 0.0,
+            filled_qty=float(raw.get("filled") or 0.0),
+            filled_price=float(raw.get("average") or raw.get("price") or 0.0),
         )
 
 
