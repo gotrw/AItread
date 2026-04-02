@@ -139,6 +139,9 @@ async def run_trading_async(cfg: dict, mode: str) -> None:
     if notifier:
         notifier.send_system_status(f"Started ({mode})", f"Symbols: {', '.join(symbols)}")
 
+    # Run the learning cycle once at startup before building workers/strategies
+    _run_learning_cycle(cfg)
+
     # Build per-symbol workers
     workers = [
         BotWorker(
@@ -160,17 +163,21 @@ async def run_trading_async(cfg: dict, mode: str) -> None:
         scanner = SignalScanner(cfg, data_provider, global_strategy, notifier)
         scanner_tasks.append(asyncio.create_task(scanner.run()))
 
+    # Periodic learning cycle task
+    learning_interval = cfg.get("learning", {}).get("tune_interval_hours", 24) * 3600
+    learning_task = asyncio.create_task(_periodic_learning(cfg, learning_interval, workers))
+
     # Run all workers concurrently
     worker_tasks = [asyncio.create_task(w.run()) for w in workers]
 
     try:
-        await asyncio.gather(*worker_tasks, *scanner_tasks)
+        await asyncio.gather(*worker_tasks, *scanner_tasks, learning_task)
     except asyncio.CancelledError:
         pass
     except KeyboardInterrupt:
         pass
     finally:
-        for task in worker_tasks + scanner_tasks:
+        for task in worker_tasks + scanner_tasks + [learning_task]:
             task.cancel()
 
         m = metrics.get_metrics()
@@ -187,6 +194,71 @@ async def run_trading_async(cfg: dict, mode: str) -> None:
                 "total_pnl": f"${m.total_pnl:.2f}",
                 "max_drawdown": f"{m.max_drawdown_pct:.2f}%",
             })
+
+
+def _run_learning_cycle(cfg: dict) -> None:
+    """Run one learning cycle: tune weights and adapt threshold."""
+    from learning.weight_tuner import WeightTuner
+    from learning.threshold_adapter import ThresholdAdapter
+    from learning.backtest_guard import BacktestGuard
+
+    learning_cfg = cfg.get("learning", {})
+    journal_path = cfg.get("monitoring", {}).get("trade_journal_file", "logs/trade_journal.jsonl")
+
+    # 1. Adapt confidence threshold based on rolling win rate
+    default_conf = cfg.get("scanner", {}).get("min_confidence", 0.55)
+    conservative_conf = learning_cfg.get("conservative_confidence", 0.70)
+    adapter = ThresholdAdapter(
+        journal_path=journal_path,
+        default_confidence=default_conf,
+        conservative_confidence=conservative_conf,
+        lookback=learning_cfg.get("threshold_lookback", 30),
+        min_samples=learning_cfg.get("min_samples", 10),
+    )
+    adapter.adapt()
+
+    # 2. Tune strategy weights
+    tuner = WeightTuner(
+        journal_path=journal_path,
+        lookback=learning_cfg.get("weight_lookback", 100),
+        min_samples=learning_cfg.get("min_samples", 10),
+        min_weight=learning_cfg.get("min_weight", 0.5),
+        max_weight=learning_cfg.get("max_weight", 3.0),
+    )
+    new_weights = tuner.tune()
+
+    # 3. Validate new weights with backtest guard before committing
+    if new_weights:
+        old_weights = tuner.load_weights()
+        guard = BacktestGuard(
+            journal_path=journal_path,
+            min_trades=learning_cfg.get("guard_min_trades", 20),
+            acceptance_ratio=learning_cfg.get("guard_acceptance_ratio", 0.9),
+        )
+        accepted, reason = guard.validate(new_weights, old_weights)
+        if not accepted:
+            logger.warning("[Learning] BacktestGuard rejected new weights: %s", reason)
+
+
+async def _periodic_learning(cfg: dict, interval_seconds: float, workers: list) -> None:
+    """Background task that runs the learning cycle every ``interval_seconds``."""
+    from strategies.multi_strategy import MultiStrategy
+
+    while True:
+        try:
+            await asyncio.sleep(interval_seconds)
+        except asyncio.CancelledError:
+            break
+        try:
+            logger.info("[Learning] Running periodic learning cycle (interval=%.0fs).", interval_seconds)
+            _run_learning_cycle(cfg)
+            # Reload weights into all active MultiStrategy instances
+            for w in workers:
+                strategy = getattr(w, "_strategy", None)
+                if isinstance(strategy, MultiStrategy):
+                    strategy.reload_weights()
+        except Exception as exc:  # noqa: BLE001
+            logger.error("[Learning] Periodic cycle error: %s", exc, exc_info=True)
 
 
 def run_paper(cfg: dict) -> None:

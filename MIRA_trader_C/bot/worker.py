@@ -23,8 +23,12 @@ Usage (from main.py orchestrator)
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import os
+import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from config import load_symbol_config
@@ -108,6 +112,13 @@ class BotWorker:
         self._open_position: Optional[Dict[str, Any]] = None  # current open position
         self._tf_seconds: int = _timeframe_to_seconds(self._timeframe)
         self._running: bool = False
+
+        # Trade journal for the learning system
+        journal_path = self._cfg.get("monitoring", {}).get(
+            "trade_journal_file", "logs/trade_journal.jsonl"
+        )
+        self._journal_path = Path(journal_path)
+        os.makedirs(self._journal_path.parent, exist_ok=True)
 
     # ── Main loop ──────────────────────────────────────────────
 
@@ -196,6 +207,7 @@ class BotWorker:
             self._broker.fill_paper_order(order, price, leverage=self._leverage)
 
         self._open_position = {
+            "trade_id": str(uuid.uuid4()),
             "side": side,
             "entry_price": fill_price,
             "qty": qty,
@@ -206,6 +218,11 @@ class BotWorker:
             "leverage": self._leverage,
             "sl_order_id": "",
             "tp_order_id": "",
+            # Signal context — used by the learning system
+            "strategy": getattr(self._strategy, "name", ""),
+            "regime": getattr(signal, "regime", ""),
+            "confidence": signal.confidence,
+            "timeframe": self._timeframe,
         }
 
         # For live futures brokers, place exchange-side SL/TP orders
@@ -331,6 +348,8 @@ class BotWorker:
             exit_reason=reason,
         ))
 
+        self._write_journal(pos, price, pnl_pct, reason)
+
         logger.info(
             "[%s] CLOSED %s @ %.4f pnl=%.2f (%.2f%%) reason=%s",
             self.symbol, side.upper(), price, pnl, pnl_pct, reason,
@@ -354,13 +373,44 @@ class BotWorker:
             )
 
     def _build_strategy(self) -> BaseStrategy:
-        """Build a strategy from the per-symbol config."""
+        """Build a strategy from the per-symbol config, applying any learned weights."""
         from strategies.multi_strategy import MultiStrategy, build_strategy
         strategy_cfg = self._cfg.get("strategy", {})
         active = strategy_cfg.get("active", "multi_strategy")
         if active == "multi_strategy":
             return MultiStrategy(strategy_cfg)
         return build_strategy(active, strategy_cfg.get(active, {}))
+
+    def _write_journal(
+        self,
+        pos: Dict[str, Any],
+        exit_price: float,
+        pnl_pct: float,
+        exit_reason: str,
+    ) -> None:
+        """Append a completed trade record to the trade journal."""
+        record = {
+            "trade_id": pos.get("trade_id", ""),
+            "symbol": self.symbol,
+            "side": pos.get("side", ""),
+            "strategy": pos.get("strategy", ""),
+            "regime": pos.get("regime", ""),
+            "confidence": pos.get("confidence", 0.0),
+            "timeframe": pos.get("timeframe", self._timeframe),
+            "entry_price": pos.get("entry_price", 0.0),
+            "exit_price": exit_price,
+            "qty": pos.get("qty", 0.0),
+            "pnl_pct": pnl_pct,
+            "win": pnl_pct > 0,
+            "entry_time": pos.get("entry_time", ""),
+            "exit_time": now_utc().isoformat(),
+            "exit_reason": exit_reason,
+        }
+        try:
+            with open(self._journal_path, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(record) + "\n")
+        except OSError as exc:
+            logger.warning("[%s] Failed to write trade journal: %s", self.symbol, exc)
 
     @property
     def status(self) -> dict:

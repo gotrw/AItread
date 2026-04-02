@@ -144,10 +144,25 @@ notifications:
     batch_summary_hours: 1 # send summary every N hours (0 = disable)
 
 # ──────────────────────────────────────────────────────────────
+# Self-Learning System
+# ──────────────────────────────────────────────────────────────
+learning:
+  tune_interval_hours: 24   # run learning cycle every N hours (paper/live)
+  weight_lookback: 100      # max recent trades for weight tuning
+  threshold_lookback: 30    # recent trades for confidence threshold
+  min_samples: 10           # min trades per strategy before adjusting weight
+  min_weight: 0.5           # clamp lower bound on strategy vote-weight
+  max_weight: 3.0           # clamp upper bound on strategy vote-weight
+  conservative_confidence: 0.70  # min_confidence raised when win rate < 45%
+  guard_min_trades: 20      # min journal trades before backtest guard runs
+  guard_acceptance_ratio: 0.9   # accept new weights if Sharpe drops ≤ 10%
+
+# ──────────────────────────────────────────────────────────────
 # Monitoring & Logging
 # ──────────────────────────────────────────────────────────────
 monitoring:
   log_level: INFO          # DEBUG | INFO | WARNING | ERROR
   log_file: logs/mira.log
   metrics_file: logs/metrics.json
+  trade_journal_file: logs/trade_journal.jsonl   # learning system trade log
   print_trades: true
