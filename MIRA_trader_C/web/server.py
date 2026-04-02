@@ -547,6 +547,183 @@ async def run_backtest(body: BacktestRequest) -> dict:
 
 
 # ─────────────────────────────────────────────────────────────
+# Signal Scanner feed
+# ─────────────────────────────────────────────────────────────
+_SIGNAL_LOG_PATH = PROJECT_ROOT / "logs" / "signal_log.jsonl"
+
+
+def _read_signal_log(limit: int = 100) -> list:
+    """Read recent signals from the JSONL signal log file."""
+    if not _SIGNAL_LOG_PATH.exists():
+        return []
+    try:
+        lines = _SIGNAL_LOG_PATH.read_text(encoding="utf-8", errors="replace").splitlines()
+        results = []
+        for line in reversed(lines[-limit * 2:]):
+            line = line.strip()
+            if line:
+                try:
+                    results.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+            if len(results) >= limit:
+                break
+        return results
+    except Exception:
+        return []
+
+
+@app.get("/api/v1/signals")
+async def get_signals(limit: int = 50, symbol: Optional[str] = None) -> dict:
+    """Return recent scanner signals from signal_log.jsonl and in-process store."""
+    try:
+        from signal_scanner.scanner import get_recent_signals
+        signals = get_recent_signals(limit * 2)
+    except Exception:
+        signals = []
+
+    # Fall back to file-based signals if in-process store is empty
+    if not signals:
+        signals = _read_signal_log(limit * 2)
+
+    if symbol:
+        signals = [s for s in signals if s.get("symbol") == symbol]
+
+    return {
+        "signals": signals[-limit:],
+        "total": len(signals),
+    }
+
+
+@app.get("/api/v1/signals/stream")
+async def signals_sse_stream(request: Request) -> StreamingResponse:
+    """SSE stream that pushes new scanner signals in real-time."""
+    q: asyncio.Queue = asyncio.Queue(maxsize=50)
+    _sse_clients.append(q)
+
+    async def generator() -> AsyncGenerator[str, None]:
+        # Send last 10 signals immediately
+        recent = _read_signal_log(10)
+        if recent:
+            yield f"event: signals\ndata: {json.dumps(recent)}\n\n"
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    msg = await asyncio.wait_for(q.get(), timeout=30)
+                    if '"type": "signal"' in msg or "action" in msg:
+                        yield msg
+                    else:
+                        yield ": keepalive\n\n"
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+        finally:
+            if q in _sse_clients:
+                _sse_clients.remove(q)
+
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"},
+    )
+
+
+# ─────────────────────────────────────────────────────────────
+# Open Positions
+# ─────────────────────────────────────────────────────────────
+_open_positions_store: Dict[str, Any] = {}
+
+
+def update_positions_store(positions: Dict[str, Any]) -> None:
+    """Called by the bot worker to update the shared positions state."""
+    _open_positions_store.clear()
+    _open_positions_store.update(positions)
+
+
+@app.get("/api/v1/positions")
+async def get_positions() -> dict:
+    """Return currently open positions for all symbols."""
+    return {"positions": _open_positions_store}
+
+
+# ─────────────────────────────────────────────────────────────
+# Advanced Analytics
+# ─────────────────────────────────────────────────────────────
+@app.get("/api/v1/analytics")
+async def get_analytics(timeframe: str = "1h") -> dict:
+    """Return advanced performance analytics (Sharpe, Sortino, etc.)."""
+    try:
+        from monitoring.analytics import compute_analytics, compute_per_symbol_analytics
+        from monitoring.metrics import Metrics
+        import json as _json
+
+        m = _read_metrics()
+        if not m.get("trade_history"):
+            from monitoring.analytics import _empty_analytics
+            return {"overall": _empty_analytics(), "per_symbol": {}}
+
+        # Reconstruct Metrics from persisted dict
+        from monitoring.metrics import TradeRecord
+        metrics = Metrics()
+        metrics.total_trades = m.get("total_trades", 0)
+        metrics.winning_trades = m.get("winning_trades", 0)
+        metrics.losing_trades = m.get("losing_trades", 0)
+        metrics.total_pnl = m.get("total_pnl", 0.0)
+        metrics.peak_pnl = m.get("peak_pnl", 0.0)
+        metrics.max_drawdown_pct = m.get("max_drawdown_pct", 0.0)
+
+        for t in m.get("trade_history", []):
+            metrics.trade_history.append(TradeRecord(
+                symbol=t.get("symbol", ""),
+                side=t.get("side", ""),
+                entry_price=t.get("entry_price", 0.0),
+                exit_price=t.get("exit_price", 0.0),
+                qty=t.get("qty", 0.0),
+                pnl=t.get("pnl", 0.0),
+                pnl_pct=t.get("pnl_pct", 0.0),
+                timestamp=t.get("timestamp", ""),
+                exit_reason=t.get("exit_reason", ""),
+            ))
+
+        overall = compute_analytics(metrics, timeframe)
+        per_symbol = compute_per_symbol_analytics(metrics, timeframe)
+
+        return {"overall": overall, "per_symbol": per_symbol}
+    except Exception as exc:
+        logger.exception("Analytics error")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ─────────────────────────────────────────────────────────────
+# Risk log
+# ─────────────────────────────────────────────────────────────
+_RISK_LOG_PATH = PROJECT_ROOT / "logs" / "risk_log.jsonl"
+
+
+@app.get("/api/v1/risk/events")
+async def get_risk_events(limit: int = 50) -> dict:
+    """Return recent risk events from risk_log.jsonl."""
+    if not _RISK_LOG_PATH.exists():
+        return {"events": []}
+    try:
+        lines = _RISK_LOG_PATH.read_text(encoding="utf-8", errors="replace").splitlines()
+        events = []
+        for line in reversed(lines[-limit * 2:]):
+            line = line.strip()
+            if line:
+                try:
+                    events.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+            if len(events) >= limit:
+                break
+        return {"events": events}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ─────────────────────────────────────────────────────────────
 # Entry point
 # ─────────────────────────────────────────────────────────────
 if __name__ == "__main__":

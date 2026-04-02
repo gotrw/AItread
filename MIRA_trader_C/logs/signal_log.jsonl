@@ -1,0 +1,2 @@
+{"symbol": "BTC/USDT", "action": "hold", "confidence": 0.0, "strategy": "multi_strategy", "regime": "choppy", "price": 28290.771129288027, "timestamp": "2026-04-02T08:39:15.175725+00:00", "timeframe": "1h", "meta": {"long_votes": 0, "short_votes": 0, "regime": "choppy"}}
+{"symbol": "ETH/USDT", "action": "hold", "confidence": 0.0, "strategy": "multi_strategy", "regime": "ranging", "price": 27158.956924523398, "timestamp": "2026-04-02T08:39:15.189890+00:00", "timeframe": "1h", "meta": {"long_votes": 0, "short_votes": 0, "regime": "ranging"}}

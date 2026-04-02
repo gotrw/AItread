@@ -1,8 +1,9 @@
 # MIRA_trader_C – Main Configuration
 # All key parameters are driven from this file. Do NOT hardcode values elsewhere.
+# Per-symbol overrides live in config/symbols/<SYMBOL>.yaml
 
 # ──────────────────────────────────────────────────────────────
-# Runtime mode:  paper | live | backtest
+# Runtime mode:  paper | live | backtest | scanner
 # ──────────────────────────────────────────────────────────────
 mode: paper
 
@@ -17,6 +18,7 @@ exchange:
   api_key: ""
   api_secret: ""
   testnet: true          # use exchange testnet when mode=live
+  futures: true          # enable futures market (USDT-margined perpetuals)
 
 data:
   symbols:
@@ -28,17 +30,29 @@ data:
   csv_dir: data/csv      # used only when provider=csv
 
 # ──────────────────────────────────────────────────────────────
+# Futures-specific settings (global defaults, per-symbol override in symbols/)
+# ──────────────────────────────────────────────────────────────
+futures:
+  leverage: 5                    # default leverage (1 = no leverage)
+  margin_type: isolated          # isolated | cross
+  liquidation_buffer_pct: 20     # close position when within this % of liquidation price
+  funding_rate_interval_hours: 8 # funding charged every N hours (simulation)
+  default_funding_rate: 0.0001   # 0.01% per interval (backtest default)
+
+# ──────────────────────────────────────────────────────────────
 # Strategy
 # ──────────────────────────────────────────────────────────────
 strategy:
-  active: multi_strategy  # trend_follow | mean_reversion | breakout | multi_strategy
+  active: multi_strategy  # trend_follow | mean_reversion | breakout | volatility | multi_strategy
+  # regime-aware multi-strategy selects the best sub-strategy for market conditions
   multi_strategy:
     strategies:
       - trend_follow
       - mean_reversion
       - breakout
-    # minimum votes required to open a position
-    min_votes: 2
+      - volatility
+    min_votes: 2              # minimum strategy votes to open a position
+    regime_aware: true        # let regime detection guide strategy selection
 
   trend_follow:
     fast_ema: 9
@@ -60,6 +74,30 @@ strategy:
     lookback: 20          # candles to measure range high/low
     atr_multiplier: 1.5   # breakout must exceed range ± ATR*multiplier
 
+  volatility:
+    bb_period: 20
+    bb_std: 2.0
+    atr_period: 14
+    squeeze_threshold: 0.02   # BB width/price ratio below this = squeeze
+    expansion_multiplier: 1.5 # ATR expansion factor to confirm breakout
+
+  regime:
+    adx_period: 14
+    adx_trending_threshold: 25   # ADX > this → trending regime
+    atr_period: 14
+    atr_volatile_multiplier: 1.5 # ATR/SMA ratio above this → volatile regime
+    lookback: 50                 # candles for regime detection
+
+# ──────────────────────────────────────────────────────────────
+# Signal Scanner
+# ──────────────────────────────────────────────────────────────
+scanner:
+  enabled: true
+  interval_seconds: 300      # scan all symbols every 5 minutes
+  min_confidence: 0.3        # only emit signals above this confidence
+  signal_log_file: logs/signal_log.jsonl
+  send_telegram: true        # send new signals to Telegram
+
 # ──────────────────────────────────────────────────────────────
 # Risk Management
 # ──────────────────────────────────────────────────────────────
@@ -69,12 +107,14 @@ risk:
   max_daily_loss_pct: 3.0          # halt trading if daily loss exceeds this
   max_open_positions: 3
   max_exposure_per_symbol_pct: 30  # % of capital per symbol
+  max_total_exposure_pct: 80       # % of total portfolio in open positions
   stop_loss_pct: 1.5               # default stop-loss from entry
   take_profit_pct: 3.0             # default take-profit from entry
   trailing_stop: false
   trailing_stop_pct: 1.0
   cooldown_after_loss_trades: 3    # skip N trades after a losing trade
   kill_switch: false               # set true to halt all trading immediately
+  risk_log_file: logs/risk_log.jsonl
 
 # ──────────────────────────────────────────────────────────────
 # Backtesting
@@ -82,8 +122,26 @@ risk:
 backtest:
   start_date: "2024-01-01"
   end_date: "2024-12-31"
-  fee_rate: 0.001          # 0.1 % taker fee
+  fee_rate: 0.0004         # 0.04 % taker fee (futures)
   slippage_pct: 0.05       # 0.05 % slippage per trade
+  simulate_funding: true   # apply funding rate charges in simulation
+  simulate_liquidation: true  # force-close if liquidation price is hit
+
+# ──────────────────────────────────────────────────────────────
+# Notifications (Telegram)
+# ──────────────────────────────────────────────────────────────
+notifications:
+  telegram:
+    enabled: false         # set true to enable Telegram alerts
+    # Credentials loaded from environment variables:
+    #   MIRA_TELEGRAM_TOKEN, MIRA_TELEGRAM_CHAT_ID
+    bot_token: ""
+    chat_id: ""
+    send_signals: true     # alert on new scanner signals
+    send_orders: true      # alert on order fills
+    send_risk_events: true # alert on risk events (daily loss, kill-switch)
+    send_errors: true      # alert on system errors
+    batch_summary_hours: 1 # send summary every N hours (0 = disable)
 
 # ──────────────────────────────────────────────────────────────
 # Monitoring & Logging

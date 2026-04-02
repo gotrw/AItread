@@ -2,8 +2,8 @@
 MIRA_trader_C – Mean-Reversion Strategy.
 
 Uses Bollinger Bands + RSI to detect oversold/overbought conditions.
-- BUY  when price closes below the lower band AND RSI < oversold
-- SELL when price closes above the upper band AND RSI > overbought
+- LONG  when price closes below the lower band AND RSI < oversold
+- SHORT when price closes above the upper band AND RSI > overbought
 """
 from __future__ import annotations
 
@@ -38,15 +38,18 @@ class MeanReversionStrategy(BaseStrategy):
         if curr_close < lower and curr_rsi < rsi_oversold:
             confidence = min((rsi_oversold - curr_rsi) / rsi_oversold, 1.0)
             return Signal(
-                action="buy",
+                action="long",
                 confidence=confidence,
+                strategy_name=self.name,
                 meta={"rsi": curr_rsi, "bb_lower": lower, "close": curr_close},
             )
         if curr_close > upper and curr_rsi > rsi_overbought:
             confidence = min((curr_rsi - rsi_overbought) / (100 - rsi_overbought), 1.0)
             return Signal(
-                action="sell",
+                action="short",
                 confidence=confidence,
+                strategy_name=self.name,
                 meta={"rsi": curr_rsi, "bb_upper": upper, "close": curr_close},
             )
-        return Signal(action="hold")
+        return Signal(action="hold", strategy_name=self.name)
+

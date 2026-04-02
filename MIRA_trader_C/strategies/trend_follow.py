@@ -2,8 +2,8 @@
 MIRA_trader_C – Trend-Following Strategy.
 
 Uses dual EMA crossover (fast/slow) combined with RSI to confirm momentum.
-- BUY  when fast EMA crosses above slow EMA AND RSI > buy_threshold
-- SELL when fast EMA crosses below slow EMA AND RSI < sell_threshold
+- LONG  when fast EMA crosses above slow EMA AND RSI > buy_threshold
+- SHORT when fast EMA crosses below slow EMA AND RSI < sell_threshold
 """
 from __future__ import annotations
 
@@ -41,14 +41,17 @@ class TrendFollowStrategy(BaseStrategy):
 
         if cross_up and curr_rsi > rsi_buy:
             return Signal(
-                action="buy",
+                action="long",
                 confidence=min((curr_rsi - rsi_buy) / 50, 1.0),
+                strategy_name=self.name,
                 meta={"rsi": curr_rsi, "fast_ema": curr_fast, "slow_ema": curr_slow},
             )
         if cross_down and curr_rsi < rsi_sell:
             return Signal(
-                action="sell",
+                action="short",
                 confidence=min((rsi_sell - curr_rsi) / 50, 1.0),
+                strategy_name=self.name,
                 meta={"rsi": curr_rsi, "fast_ema": curr_fast, "slow_ema": curr_slow},
             )
-        return Signal(action="hold")
+        return Signal(action="hold", strategy_name=self.name)
+

@@ -56,7 +56,7 @@ def test_trend_follow_returns_signal():
     df = make_ohlcv(prices)
     sig = strat.generate_signal(df)
     assert isinstance(sig, Signal)
-    assert sig.action in ("buy", "sell", "hold")
+    assert sig.action in ("long", "short", "hold", "buy", "sell")
 
 
 def test_trend_follow_uptrend_favours_buy():
@@ -67,8 +67,8 @@ def test_trend_follow_uptrend_favours_buy():
     prices = list(range(29900, 30050))
     df = make_ohlcv(prices)
     sig = strat.generate_signal(df)
-    # Should not produce a sell signal in a strong uptrend
-    assert sig.action != "sell"
+    # Should not produce a sell/short signal in a strong uptrend
+    assert sig.action not in ("sell", "short")
 
 
 # ── MeanReversionStrategy ─────────────────────────────────────
@@ -92,8 +92,8 @@ def test_mean_reversion_oversold_triggers_buy():
     prices = [30000] * 20 + [28000] * 5
     df = make_ohlcv(prices)
     sig = strat.generate_signal(df)
-    # With extreme thresholds price should trigger buy (oversold > 80)
-    assert sig.action in ("buy", "hold")
+    # With extreme thresholds price should trigger long (oversold > 80) or hold
+    assert sig.action in ("long", "buy", "hold")
 
 
 # ── BreakoutStrategy ──────────────────────────────────────────
@@ -124,4 +124,5 @@ def test_breakout_upward_breakout_triggers_buy():
     prices = [30000] * 10 + [32000]
     df = make_ohlcv(prices)
     sig = strat.generate_signal(df)
-    assert sig.action == "buy"
+    # Strategies now emit 'long' instead of 'buy' for futures support
+    assert sig.action in ("long", "buy")

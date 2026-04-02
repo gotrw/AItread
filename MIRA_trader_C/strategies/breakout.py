@@ -3,8 +3,8 @@ MIRA_trader_C – Breakout Strategy.
 
 Detects breakouts above recent N-candle range high or below range low,
 with an ATR-based buffer to avoid false breaks.
-- BUY  when close > range_high + ATR * multiplier
-- SELL when close < range_low  - ATR * multiplier
+- LONG  when close > range_high + ATR * multiplier
+- SHORT when close < range_low  - ATR * multiplier
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ class BreakoutStrategy(BaseStrategy):
         atr_mult = params.get("atr_multiplier", 1.5)
 
         if len(df) < max(lookback, atr_period) + 1:
-            return Signal(action="hold")
+            return Signal(action="hold", strategy_name=self.name)
 
         atr_series = calc_atr(df, atr_period)
         curr_atr = atr_series.iloc[-1]
@@ -43,8 +43,9 @@ class BreakoutStrategy(BaseStrategy):
         if curr_close > buy_level:
             confidence = min((curr_close - buy_level) / curr_atr, 1.0)
             return Signal(
-                action="buy",
+                action="long",
                 confidence=confidence,
+                strategy_name=self.name,
                 meta={
                     "range_high": range_high,
                     "buy_level": buy_level,
@@ -55,8 +56,9 @@ class BreakoutStrategy(BaseStrategy):
         if curr_close < sell_level:
             confidence = min((sell_level - curr_close) / curr_atr, 1.0)
             return Signal(
-                action="sell",
+                action="short",
                 confidence=confidence,
+                strategy_name=self.name,
                 meta={
                     "range_low": range_low,
                     "sell_level": sell_level,
@@ -64,4 +66,5 @@ class BreakoutStrategy(BaseStrategy):
                     "atr": curr_atr,
                 },
             )
-        return Signal(action="hold")
+        return Signal(action="hold", strategy_name=self.name)
+

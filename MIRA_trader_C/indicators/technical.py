@@ -101,3 +101,47 @@ def atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
         [high - low, (high - prev_close).abs(), (low - prev_close).abs()], axis=1
     ).max(axis=1)
     return tr.ewm(alpha=1 / period, adjust=False).mean()
+
+
+# ──────────────────────────────────────────────────────────────
+# ADX (Average Directional Index)
+# ──────────────────────────────────────────────────────────────
+
+def adx(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
+    """Average Directional Index.
+
+    Returns a DataFrame with columns: adx, plus_di, minus_di.
+    Requires 'high', 'low', 'close' columns.
+    """
+    high = df["high"]
+    low = df["low"]
+    prev_high = high.shift(1)
+    prev_low = low.shift(1)
+    prev_close = df["close"].shift(1)
+
+    # True Range
+    tr_s = pd.concat(
+        [high - low, (high - prev_close).abs(), (low - prev_close).abs()], axis=1
+    ).max(axis=1)
+
+    # Directional Movement
+    up_move = high - prev_high
+    down_move = prev_low - low
+
+    plus_dm = pd.Series(
+        np.where((up_move > down_move) & (up_move > 0), up_move, 0.0), index=df.index
+    )
+    minus_dm = pd.Series(
+        np.where((down_move > up_move) & (down_move > 0), down_move, 0.0), index=df.index
+    )
+
+    # Smoothed using Wilder's method
+    atr_s = tr_s.ewm(alpha=1 / period, adjust=False).mean()
+    plus_di = 100 * plus_dm.ewm(alpha=1 / period, adjust=False).mean() / atr_s.replace(0, np.nan)
+    minus_di = 100 * minus_dm.ewm(alpha=1 / period, adjust=False).mean() / atr_s.replace(0, np.nan)
+
+    dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan)
+    adx_line = dx.ewm(alpha=1 / period, adjust=False).mean()
+
+    return pd.DataFrame({"adx": adx_line, "plus_di": plus_di, "minus_di": minus_di})
+
