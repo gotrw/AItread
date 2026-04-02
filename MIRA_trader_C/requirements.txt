@@ -1,0 +1,12 @@
+# MIRA_trader_C – Python Dependencies
+#
+# Core (required)
+pyyaml>=6.0
+pandas>=2.0
+numpy>=1.24
+
+# Exchange connectivity (free, open-source)
+ccxt>=4.0
+
+# Testing
+pytest>=7.0
