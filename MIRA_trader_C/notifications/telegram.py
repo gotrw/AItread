@@ -87,22 +87,66 @@ class TelegramNotifier:
 
     # ── Public alert methods ───────────────────────────────────
 
-    def send_signal(self, scanned_signal: Any) -> None:
-        """Alert for a new scanner signal (ScannedSignal instance)."""
-        if not self._enabled or not self._send_signals:
-            return
+    def _format_signal(self, scanned_signal: Any) -> str:
+        """Format a ScannedSignal as a Telegram message string."""
         direction = "🟢 LONG" if scanned_signal.action == "long" else "🔴 SHORT"
-        msg = (
+        return (
             f"📡 *Signal Scanner*\n"
             f"Pair: `{scanned_signal.symbol}`\n"
             f"Signal: {direction}\n"
             f"Confidence: `{scanned_signal.confidence:.0%}`  Risk: `{scanned_signal.risk_label()}`\n"
             f"Regime: `{scanned_signal.regime or 'unknown'}`\n"
-            f"Price: `{scanned_signal.price:.4f}`\n"
+            f"Price: `{scanned_signal.price or 0:.4f}`\n"
             f"Strategy: `{scanned_signal.strategy}`\n"
             f"Time: `{scanned_signal.timestamp}`"
         )
-        self._send(msg)
+
+    def _format_order(
+        self,
+        symbol: str,
+        side: str,
+        qty: float,
+        price: float,
+        pnl: Optional[float] = None,
+        exit_reason: str = "",
+    ) -> str:
+        """Format an order-filled event as a Telegram message string."""
+        icon = "📥" if side in ("buy", "long") else "📤"
+        pnl_str = f"\nPnL: `{'%.2f' % pnl} USDT`" if pnl is not None else ""
+        reason_str = f"\nReason: `{exit_reason}`" if exit_reason else ""
+        return (
+            f"{icon} *Order Filled*\n"
+            f"Pair: `{symbol}`\n"
+            f"Side: `{side.upper()}`\n"
+            f"Qty: `{qty:.6f}`\n"
+            f"Price: `{price:.4f}`"
+            f"{pnl_str}{reason_str}"
+        )
+
+    def _format_risk_event(self, event_type: str, data: Dict[str, Any]) -> str:
+        """Format a risk event as a Telegram message string."""
+        icons = {
+            "daily_loss_limit": "⚠️",
+            "kill_switch": "🛑",
+            "kill_switch_activated": "🛑",
+            "liquidation_buffer": "🔥",
+            "cooldown": "⏸️",
+        }
+        icon = icons.get(event_type, "⚠️")
+        details = "\n".join(f"`{k}`: `{v}`" for k, v in data.items() if v != "")
+        return f"{icon} *Risk Event: {event_type}*\n{details}"
+
+    def _batch_summary_ready(self) -> bool:
+        """Return True if the batch summary interval has elapsed."""
+        if self._summary_interval <= 0:
+            return False
+        return (time.time() - self._last_summary_time) >= self._summary_interval
+
+    def send_signal(self, scanned_signal: Any) -> None:
+        """Alert for a new scanner signal (ScannedSignal instance)."""
+        if not self._enabled or not self._send_signals:
+            return
+        self._send(self._format_signal(scanned_signal))
 
     def send_order(
         self,
@@ -116,37 +160,13 @@ class TelegramNotifier:
         """Alert when an order is filled."""
         if not self._enabled or not self._send_orders:
             return
-        icon = "📥" if side in ("buy", "long") else "📤"
-        pnl_str = f"\nPnL: `{'%.2f' % pnl} USDT`" if pnl is not None else ""
-        reason_str = f"\nReason: `{exit_reason}`" if exit_reason else ""
-        msg = (
-            f"{icon} *Order Filled*\n"
-            f"Pair: `{symbol}`\n"
-            f"Side: `{side.upper()}`\n"
-            f"Qty: `{qty:.6f}`\n"
-            f"Price: `{price:.4f}`"
-            f"{pnl_str}{reason_str}"
-        )
-        self._send(msg)
+        self._send(self._format_order(symbol, side, qty, price, pnl, exit_reason))
 
     def send_risk_event(self, event_type: str, data: Dict[str, Any]) -> None:
         """Alert for risk management events (daily loss hit, kill-switch, etc.)."""
         if not self._enabled or not self._send_risk:
             return
-        icons = {
-            "daily_loss_limit": "⚠️",
-            "kill_switch": "🛑",
-            "kill_switch_activated": "🛑",
-            "liquidation_buffer": "🔥",
-            "cooldown": "⏸️",
-        }
-        icon = icons.get(event_type, "⚠️")
-        details = "\n".join(f"`{k}`: `{v}`" for k, v in data.items() if v != "")
-        msg = (
-            f"{icon} *Risk Event: {event_type}*\n"
-            f"{details}"
-        )
-        self._send(msg)
+        self._send(self._format_risk_event(event_type, data))
 
     def send_error(self, message: str, symbol: str = "") -> None:
         """Alert for system errors."""
@@ -168,10 +188,9 @@ class TelegramNotifier:
         """Send a batch summary if the interval has elapsed."""
         if not self._enabled or self._summary_interval <= 0:
             return
-        now = time.time()
-        if now - self._last_summary_time >= self._summary_interval:
+        if self._batch_summary_ready():
             self.send_summary(metrics)
-            self._last_summary_time = now
+            self._last_summary_time = time.time()
 
     def send_system_status(self, status: str, details: str = "") -> None:
         """Send a system status message (start/stop/restart)."""

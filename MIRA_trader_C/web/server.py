@@ -372,7 +372,7 @@ async def toggle_kill_switch() -> dict:
 # Allowlist map: user input → literal command-line value.
 # Using a dict lookup (not the raw user string) breaks CodeQL taint flow
 # and guarantees no command-line injection regardless of the input value.
-_MODE_MAP: dict = {"paper": "paper", "live": "live", "backtest": "backtest"}
+_MODE_MAP: dict = {"paper": "paper", "live": "live", "backtest": "backtest", "scanner": "scanner"}
 
 
 class BotStartRequest(BaseModel):
@@ -460,6 +460,7 @@ async def run_backtest(body: BacktestRequest) -> dict:
         from strategies.trend_follow import TrendFollowStrategy
         from strategies.mean_reversion import MeanReversionStrategy
         from strategies.breakout import BreakoutStrategy
+        from strategies.volatility import VolatilityStrategy
         from strategies.multi_strategy import MultiStrategy
         from backtesting.engine import BacktestEngine
 
@@ -467,6 +468,7 @@ async def run_backtest(body: BacktestRequest) -> dict:
             "trend_follow": TrendFollowStrategy,
             "mean_reversion": MeanReversionStrategy,
             "breakout": BreakoutStrategy,
+            "volatility": VolatilityStrategy,
         }
 
         cfg = _cfg()

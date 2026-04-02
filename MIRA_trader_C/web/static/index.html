@@ -467,9 +467,15 @@
       <div class="nav-item active" data-page="dashboard">
         <span class="icon">📊</span><span>Dashboard</span>
       </div>
+      <div class="nav-item" data-page="signals">
+        <span class="icon">📡</span><span>Signals</span>
+        <span class="nav-badge" id="signalBadge">0</span>
+      </div>
+      <div class="nav-item" data-page="analytics">
+        <span class="icon">📐</span><span>Analytics</span>
+      </div>
       <div class="nav-item" data-page="trading">
         <span class="icon">🤖</span><span>Bot Control</span>
-        <span class="nav-badge" id="signalBadge">0</span>
       </div>
       <div class="nav-item" data-page="history">
         <span class="icon">📜</span><span>Trade History</span>
@@ -639,6 +645,7 @@
                 <label class="form-label">Trading Mode</label>
                 <select class="form-select" id="modeSelect">
                   <option value="paper">📝 Paper Trading (Safe)</option>
+                  <option value="scanner">📡 Scanner Only (No Trades)</option>
                   <option value="backtest">🔬 Backtest</option>
                   <option value="live">💹 Live Trading</option>
                 </select>
@@ -693,17 +700,139 @@
 
       <!-- Live Signals -->
       <div class="card" style="margin-bottom:16px">
-        <div class="card-title">📡 Live Signals</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div class="card-title" style="margin-bottom:0">📡 Live Signals</div>
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="refreshSignals()">↻ Refresh</button>
+        </div>
         <div class="signal-grid" id="signalGrid">
-          <div class="empty" style="grid-column:1/-1"><div class="em-icon">📡</div>Start the bot to see live signals</div>
+          <div class="empty" style="grid-column:1/-1"><div class="em-icon">📡</div>Signals will appear here when scanner is running</div>
         </div>
       </div>
 
       <!-- Open Positions -->
       <div class="card">
-        <div class="card-title">📂 Open Positions</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div class="card-title" style="margin-bottom:0">📂 Open Positions</div>
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="refreshPositions()">↻ Refresh</button>
+        </div>
         <div id="openPositions">
           <div class="empty"><div class="em-icon">📭</div>No open positions</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────── SIGNALS PAGE ──────────────────────── -->
+    <div class="page" id="page-signals">
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+          <div style="flex:1">
+            <div class="card-title" style="margin-bottom:0">📡 Signal Scanner Feed</div>
+          </div>
+          <select class="form-select" style="width:160px;margin-bottom:0" id="sigFilterSymbol" onchange="renderSignalsTable()">
+            <option value="">All Symbols</option>
+          </select>
+          <select class="form-select" style="width:140px;margin-bottom:0" id="sigFilterAction" onchange="renderSignalsTable()">
+            <option value="">All Actions</option>
+            <option value="long">Long only</option>
+            <option value="short">Short only</option>
+            <option value="hold">Hold only</option>
+          </select>
+          <button class="btn btn-ghost" style="padding:6px 12px;font-size:11px" onclick="refreshSignals()">↻ Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th><th>Symbol</th><th>Action</th><th>Confidence</th>
+                <th>Risk</th><th>Regime</th><th>Strategy</th><th>Price</th>
+              </tr>
+            </thead>
+            <tbody id="signalsTableBody">
+              <tr><td colspan="8"><div class="empty"><div class="em-icon">📡</div>No signals yet – start scanner or bot</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;font-size:12px;color:var(--text2)">
+          <span id="signalsCount">0 signals</span>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost" style="padding:6px 12px;font-size:11px" onclick="signalsPageNav(-1)">← Prev</button>
+            <span id="signalsPageInfo" style="line-height:30px;font-family:JetBrains Mono">Page 1</span>
+            <button class="btn btn-ghost" style="padding:6px 12px;font-size:11px" onclick="signalsPageNav(1)">Next →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Risk Events -->
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div class="card-title" style="margin-bottom:0">⚠️ Risk Events</div>
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="refreshRiskEvents()">↻ Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Time</th><th>Event</th><th>Symbol</th><th>Details</th></tr>
+            </thead>
+            <tbody id="riskEventsBody">
+              <tr><td colspan="4"><div class="empty"><div class="em-icon">✅</div>No risk events</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────── ANALYTICS PAGE ────────────────────── -->
+    <div class="page" id="page-analytics">
+      <div class="kpi-grid" style="margin-bottom:16px">
+        <div class="kpi cyan">
+          <div class="glow"></div>
+          <div class="kpi-label">Sharpe Ratio</div>
+          <div class="kpi-val" id="anSharpe">—</div>
+          <div class="kpi-sub">Risk-adjusted return</div>
+          <div class="kpi-icon">📐</div>
+        </div>
+        <div class="kpi green">
+          <div class="glow"></div>
+          <div class="kpi-label">Sortino Ratio</div>
+          <div class="kpi-val" id="anSortino">—</div>
+          <div class="kpi-sub">Downside-adjusted</div>
+          <div class="kpi-icon">📊</div>
+        </div>
+        <div class="kpi gold">
+          <div class="glow"></div>
+          <div class="kpi-label">Profit Factor</div>
+          <div class="kpi-val" id="anPF">—</div>
+          <div class="kpi-sub">Gross wins / losses</div>
+          <div class="kpi-icon">⚖️</div>
+        </div>
+        <div class="kpi red">
+          <div class="glow"></div>
+          <div class="kpi-label">Max Drawdown</div>
+          <div class="kpi-val" id="anMaxDD">—</div>
+          <div class="kpi-sub">Peak-to-trough</div>
+          <div class="kpi-icon">📉</div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-bottom:16px">
+        <div class="col-6">
+          <div class="card">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+              <div class="card-title" style="margin-bottom:0">📋 Overall Analytics</div>
+              <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="loadAnalytics()">↻ Refresh</button>
+            </div>
+            <div id="anOverall" style="display:grid;gap:8px;padding-top:4px">
+              <div class="empty"><div class="em-icon">📊</div>No trade data yet</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6">
+          <div class="card">
+            <div class="card-title" style="margin-bottom:12px">📍 Per-Symbol Analytics</div>
+            <div id="anPerSymbol">
+              <div class="empty"><div class="em-icon">📍</div>No per-symbol data yet</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -924,6 +1053,7 @@
               <option value="trend_follow">Trend Follow</option>
               <option value="mean_reversion">Mean Reversion</option>
               <option value="breakout">Breakout</option>
+              <option value="volatility">Volatility (BB Squeeze)</option>
               <option value="multi_strategy">Multi Strategy</option>
             </select>
           </div>
@@ -1022,9 +1152,9 @@ let equityChart = null, donutChart = null, dailyBarChart = null, btEquityChart =
 // Navigation
 // ─────────────────────────────────────────────────────
 const pageTitles = {
-  dashboard:'Dashboard', trading:'Bot Control',
-  history:'Trade History', settings:'Settings',
-  backtest:'Backtest Lab', logs:'Logs',
+  dashboard:'Dashboard', signals:'Signals', analytics:'Analytics',
+  trading:'Bot Control', history:'Trade History',
+  settings:'Settings', backtest:'Backtest Lab', logs:'Logs',
 };
 
 function navigate(page) {
@@ -1035,6 +1165,8 @@ function navigate(page) {
   document.getElementById('pageTitle').textContent = pageTitles[page] || page;
   if (page === 'settings') loadSettings();
   if (page === 'logs') refreshLogs();
+  if (page === 'signals') { refreshSignals(); refreshRiskEvents(); }
+  if (page === 'analytics') loadAnalytics();
 }
 
 document.querySelectorAll('.nav-item').forEach(item => {
@@ -1202,8 +1334,9 @@ function updateMetrics(m) {
   updateDonut(winning_trades, losing_trades);
   updateDailyBar(historyAll);
 
-  // Signal count badge
-  document.getElementById('signalBadge').textContent = historyAll.length;
+  // Update positions from API
+  refreshPositions();
+  // Signal count badge updated on refreshSignals()
 }
 
 // ─────────────────────────────────────────────────────
@@ -1560,6 +1693,249 @@ async function runBacktest() {
 }
 
 // ─────────────────────────────────────────────────────
+// Signals Page
+// ─────────────────────────────────────────────────────
+let signalsAll = [];
+let signalsFiltered = [];
+let signalsPageIdx = 0;
+const SIGNALS_PAGE_SIZE = 25;
+
+async function refreshSignals() {
+  try {
+    const r = await api('GET', '/signals?limit=200');
+    signalsAll = (r.signals || []).reverse(); // newest first
+    updateSignalBadge(signalsAll);
+    buildSymbolFilter();
+    renderSignalCards();
+    renderSignalsTable();
+  } catch(e) {}
+}
+
+function buildSymbolFilter() {
+  const sel = document.getElementById('sigFilterSymbol');
+  if (!sel) return;
+  const current = sel.value;
+  const syms = [...new Set(signalsAll.map(s => s.symbol).filter(Boolean))];
+  sel.innerHTML = '<option value="">All Symbols</option>' +
+    syms.map(s => `<option value="${s}"${s===current?' selected':''}>${s}</option>`).join('');
+}
+
+function actionBadgeClass(action) {
+  if (!action) return 'badge' ;
+  action = action.toLowerCase();
+  if (action === 'long' || action === 'buy') return 'badge badge-green';
+  if (action === 'short' || action === 'sell') return 'badge badge-red';
+  return 'badge';
+}
+
+function regimeBadge(regime) {
+  if (!regime) return '';
+  const colors = {trending:'cyan', ranging:'gold', volatile:'red', choppy:'purple'};
+  const cls = colors[regime] || 'text3';
+  return `<span style="color:var(--${cls});font-size:10px">${regime}</span>`;
+}
+
+function riskBadge(label) {
+  if (!label) return '';
+  const cls = label === 'HIGH' ? 'badge-red' : label === 'MED' ? 'badge-gold' : '';
+  return `<span class="badge ${cls}" style="font-size:9px">${label}</span>`;
+}
+
+function renderSignalCards() {
+  const grid = document.getElementById('signalGrid');
+  if (!grid) return;
+  const recent = signalsAll.slice(0, 8);
+  if (!recent.length) {
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="em-icon">📡</div>No signals yet – start scanner or bot</div>';
+    return;
+  }
+  grid.innerHTML = recent.map(s => {
+    const action = (s.action || 'hold').toUpperCase();
+    const isLong = ['LONG','BUY'].includes(action);
+    const isShort = ['SHORT','SELL'].includes(action);
+    const color = isLong ? 'var(--green)' : isShort ? 'var(--red)' : 'var(--text3)';
+    const conf = ((s.confidence || 0) * 100).toFixed(0);
+    return `<div class="signal-card" style="border-color:${color}30">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span class="td-symbol" style="font-size:13px">${s.symbol||'?'}</span>
+        <span style="color:${color};font-weight:700;font-size:13px">${action}</span>
+      </div>
+      <div style="font-size:10px;color:var(--text2)">Conf: ${conf}% · ${s.price ? '$'+Number(s.price).toFixed(2) : ''}</div>
+      <div style="font-size:10px;margin-top:4px">${regimeBadge(s.regime)} ${riskBadge(s.risk_label)}</div>
+      <div style="font-size:9px;color:var(--text3);margin-top:4px">${(s.timestamp||'').substring(0,16).replace('T',' ')}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderSignalsTable() {
+  const symF = document.getElementById('sigFilterSymbol')?.value || '';
+  const actF = document.getElementById('sigFilterAction')?.value || '';
+  signalsFiltered = signalsAll.filter(s => {
+    const sym = (s.symbol || '').toLowerCase();
+    const act = (s.action || '').toLowerCase();
+    return (!symF || s.symbol === symF) && (!actF || act === actF);
+  });
+  signalsPageIdx = 0;
+  _renderSignalsPage();
+}
+
+function _renderSignalsPage() {
+  const tbody = document.getElementById('signalsTableBody');
+  const count = document.getElementById('signalsCount');
+  const info = document.getElementById('signalsPageInfo');
+  if (!tbody) return;
+  const start = signalsPageIdx * SIGNALS_PAGE_SIZE;
+  const page = signalsFiltered.slice(start, start + SIGNALS_PAGE_SIZE);
+  const total = signalsFiltered.length;
+  if (count) count.textContent = `${total} signals`;
+  if (info) info.textContent = `Page ${signalsPageIdx+1} / ${Math.max(1, Math.ceil(total/SIGNALS_PAGE_SIZE))}`;
+  if (!page.length) {
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="em-icon">📡</div>No signals found</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = page.map(s => {
+    const conf = ((s.confidence || 0) * 100).toFixed(0);
+    return `<tr>
+      <td style="font-size:10px;color:var(--text3)">${(s.timestamp||'').substring(0,16).replace('T',' ')}</td>
+      <td class="td-symbol">${s.symbol||'—'}</td>
+      <td><span class="${actionBadgeClass(s.action)}">${(s.action||'hold').toUpperCase()}</span></td>
+      <td style="font-family:JetBrains Mono">${conf}%</td>
+      <td>${riskBadge(s.risk_label)}</td>
+      <td>${regimeBadge(s.regime)}</td>
+      <td style="font-size:10px;color:var(--text2)">${s.strategy||'—'}</td>
+      <td style="font-family:JetBrains Mono">${s.price ? '$'+Number(s.price).toFixed(2) : '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+window.signalsPageNav = function(dir) {
+  const max = Math.max(0, Math.ceil(signalsFiltered.length / SIGNALS_PAGE_SIZE) - 1);
+  signalsPageIdx = Math.max(0, Math.min(signalsPageIdx + dir, max));
+  _renderSignalsPage();
+};
+
+function updateSignalBadge(signals) {
+  const actionable = signals.filter(s => s.action && s.action !== 'hold').length;
+  const badge = document.getElementById('signalBadge');
+  if (badge) badge.textContent = actionable;
+}
+
+// ─────────────────────────────────────────────────────
+// Positions
+// ─────────────────────────────────────────────────────
+async function refreshPositions() {
+  try {
+    const r = await api('GET', '/positions');
+    renderPositions(r.positions || {});
+  } catch(e) {}
+}
+
+function renderPositions(positions) {
+  const el = document.getElementById('openPositions');
+  if (!el) return;
+  const entries = Object.entries(positions);
+  if (!entries.length) {
+    el.innerHTML = '<div class="empty"><div class="em-icon">📭</div>No open positions</div>';
+    return;
+  }
+  el.innerHTML = `<table><thead><tr>
+    <th>Symbol</th><th>Side</th><th>Qty</th><th>Entry</th><th>Leverage</th><th>Liq. Price</th><th>Unreal. PnL</th>
+  </tr></thead><tbody>` +
+  entries.map(([sym, p]) => {
+    const side = p.side || 'long';
+    const isLong = side === 'buy' || side === 'long';
+    const upnl = p.unrealised_pnl || 0;
+    return `<tr>
+      <td class="td-symbol">${sym}</td>
+      <td class="${isLong ? 'td-side-buy' : 'td-side-sell'}">${side.toUpperCase()}</td>
+      <td style="font-family:JetBrains Mono">${(+p.qty||0).toFixed(6)}</td>
+      <td style="font-family:JetBrains Mono">$${(+p.entry_price||0).toFixed(2)}</td>
+      <td><span class="badge badge-cyan">${p.leverage || 1}x</span></td>
+      <td style="font-family:JetBrains Mono;color:var(--red)">${p.liquidation_price ? '$'+Number(p.liquidation_price).toFixed(2) : '—'}</td>
+      <td class="${upnl>=0?'td-pnl-pos':'td-pnl-neg'}">${upnl>=0?'+':''}$${upnl.toFixed(2)}</td>
+    </tr>`;
+  }).join('') + '</tbody></table>';
+}
+
+// ─────────────────────────────────────────────────────
+// Risk Events
+// ─────────────────────────────────────────────────────
+async function refreshRiskEvents() {
+  try {
+    const r = await api('GET', '/risk/events?limit=30');
+    renderRiskEvents(r.events || []);
+  } catch(e) {}
+}
+
+function renderRiskEvents(events) {
+  const tbody = document.getElementById('riskEventsBody');
+  if (!tbody) return;
+  if (!events.length) {
+    tbody.innerHTML = '<tr><td colspan="4"><div class="empty"><div class="em-icon">✅</div>No risk events</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = events.map(e => `<tr>
+    <td style="font-size:10px;color:var(--text3)">${(e.timestamp||'').substring(0,16).replace('T',' ')}</td>
+    <td><span class="badge badge-red" style="font-size:10px">${e.event_type||e.type||'—'}</span></td>
+    <td class="td-symbol">${e.symbol||'—'}</td>
+    <td style="font-size:11px;color:var(--text2)">${JSON.stringify(e.data||e.detail||{})}</td>
+  </tr>`).join('');
+}
+
+// ─────────────────────────────────────────────────────
+// Analytics Page
+// ─────────────────────────────────────────────────────
+async function loadAnalytics() {
+  try {
+    const r = await api('GET', '/analytics');
+    renderAnalytics(r.overall || {}, r.per_symbol || {});
+  } catch(e) {}
+}
+
+function renderAnalytics(overall, perSymbol) {
+  // KPI cards
+  const setKPI = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val ?? '—'; };
+  setKPI('anSharpe', overall.sharpe_ratio != null ? Number(overall.sharpe_ratio).toFixed(2) : '—');
+  setKPI('anSortino', overall.sortino_ratio != null ? Number(overall.sortino_ratio).toFixed(2) : '—');
+  setKPI('anPF', overall.profit_factor != null ? Number(overall.profit_factor).toFixed(2) : '—');
+  setKPI('anMaxDD', overall.max_drawdown_pct != null ? Number(overall.max_drawdown_pct).toFixed(2)+'%' : '—');
+
+  // Overall metrics table
+  const anOverall = document.getElementById('anOverall');
+  if (anOverall) {
+    const keys = Object.entries(overall).filter(([k]) => !['trade_history'].includes(k));
+    if (!keys.length) {
+      anOverall.innerHTML = '<div class="empty"><div class="em-icon">📊</div>No trade data yet</div>';
+    } else {
+      anOverall.innerHTML = keys.map(([k, v]) => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)">
+          <span style="color:var(--text2);font-size:12px">${k.replace(/_/g,' ')}</span>
+          <span style="font-family:JetBrains Mono;font-size:12px">${v ?? '—'}</span>
+        </div>`).join('');
+    }
+  }
+
+  // Per-symbol
+  const anPerSymbol = document.getElementById('anPerSymbol');
+  if (anPerSymbol) {
+    const syms = Object.entries(perSymbol);
+    if (!syms.length) {
+      anPerSymbol.innerHTML = '<div class="empty"><div class="em-icon">📍</div>No per-symbol data yet</div>';
+    } else {
+      anPerSymbol.innerHTML = syms.map(([sym, d]) => `
+        <div style="margin-bottom:12px;padding:10px;background:var(--surface2);border-radius:var(--radius-sm)">
+          <div style="font-weight:600;color:var(--cyan);margin-bottom:8px">${sym}</div>
+          ${Object.entries(d).map(([k,v]) => `
+            <div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0">
+              <span style="color:var(--text3)">${k.replace(/_/g,' ')}</span>
+              <span style="font-family:JetBrains Mono">${v ?? '—'}</span>
+            </div>`).join('')}
+        </div>`).join('');
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────
 // Logs
 // ─────────────────────────────────────────────────────
 function appendLogLine(line) {
@@ -1614,6 +1990,14 @@ async function init() {
   fetchAndUpdateEquity();
   // Refresh equity every 30s
   setInterval(fetchAndUpdateEquity, 30000);
+
+  // Fetch signals and positions on load (best-effort)
+  refreshSignals();
+  refreshPositions();
+
+  // Poll signals and positions every 60s
+  setInterval(refreshSignals, 60000);
+  setInterval(refreshPositions, 30000);
 }
 
 init();

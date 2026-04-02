@@ -27,7 +27,7 @@ import asyncio
 import json
 import logging
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -46,25 +46,36 @@ class ScannedSignal:
     action: str           # long | short | hold
     confidence: float     # 0.0 – 1.0
     strategy: str         # originating strategy name
-    regime: str           # market regime at scan time
-    price: float          # price at scan time
-    timestamp: str        # ISO 8601 UTC
-    timeframe: str        # e.g. '1h'
-    meta: Dict[str, Any]  # strategy-specific metadata
+    regime: str = ""      # market regime at scan time
+    price: float = 0.0    # price at scan time
+    timestamp: str = ""   # ISO 8601 UTC (auto-filled if empty)
+    timeframe: str = "1h" # e.g. '1h'
+    meta: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not self.timestamp:
+            self.timestamp = datetime.now(timezone.utc).isoformat()
 
     def is_actionable(self) -> bool:
         return self.action in ("long", "short")
 
     def risk_label(self) -> str:
-        """Human-readable risk label based on confidence."""
+        """Human-readable risk label based on confidence.
+
+        Returns 'HIGH', 'MED', 'LOW', or '' for non-actionable signals.
+        """
+        if not self.is_actionable():
+            return ""
         if self.confidence >= 0.8:
             return "HIGH"
         if self.confidence >= 0.5:
-            return "MEDIUM"
+            return "MED"
         return "LOW"
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        d["risk_label"] = self.risk_label()
+        return d
 
 
 # ── In-process signal store (shared with web dashboard) ───────
@@ -76,6 +87,11 @@ _MAX_SIGNALS = 500
 def get_recent_signals(limit: int = 50) -> List[dict]:
     """Return the most recent scanned signals as dicts (for /api/signals)."""
     return [s.to_dict() for s in _signal_store[-limit:]]
+
+
+def _clear_signals() -> None:
+    """Clear the in-process signal store (used in tests)."""
+    _signal_store.clear()
 
 
 def _store_signal(sig: ScannedSignal) -> None:

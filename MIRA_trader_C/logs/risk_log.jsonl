@@ -42,3 +42,47 @@
 {"ts": "2026-04-02T08:49:59.212749+00:00", "event": "daily_loss_limit", "symbol": "BTC/USDT", "daily_pnl": -3.0}
 {"ts": "2026-04-02T08:49:59.214307+00:00", "event": "trade_result", "symbol": "", "pnl_pct": -1.0, "daily_pnl": -1.0}
 {"ts": "2026-04-02T08:49:59.216800+00:00", "event": "trade_result", "symbol": "", "pnl_pct": 2.0, "daily_pnl": 2.0}
+{"ts": "2026-04-02T08:56:41.906684+00:00", "event": "trade_result", "symbol": "", "pnl_pct": 1.7399360881433044, "daily_pnl": 1.7399360881433044}
+{"ts": "2026-04-02T08:56:41.908284+00:00", "event": "trade_result", "symbol": "", "pnl_pct": -0.10027997236203567, "daily_pnl": 1.6396561157812686}
+{"ts": "2026-04-02T08:56:41.916417+00:00", "event": "trade_result", "symbol": "", "pnl_pct": 1.7399360881433044, "daily_pnl": 1.7399360881433044}
+{"ts": "2026-04-02T08:56:41.917750+00:00", "event": "trade_result", "symbol": "", "pnl_pct": -0.10027997236203567, "daily_pnl": 1.6396561157812686}
+{"ts": "2026-04-02T08:56:41.925453+00:00", "event": "trade_result", "symbol": "", "pnl_pct": 1.7399360881433044, "daily_pnl": 1.7399360881433044}
+{"ts": "2026-04-02T08:56:41.926790+00:00", "event": "trade_result", "symbol": "", "pnl_pct": -0.10027997236203567, "daily_pnl": 1.6396561157812686}
+{"ts": "2026-04-02T08:56:41.950267+00:00", "event": "kill_switch", "symbol": "BTC/USDT", "price": 50000.0}
+{"ts": "2026-04-02T08:56:41.951683+00:00", "event": "trade_result", "symbol": "", "pnl_pct": -3.0, "daily_pnl": -3.0}
+{"ts": "2026-04-02T08:56:41.951747+00:00", "event": "daily_loss_limit", "symbol": "BTC/USDT", "daily_pnl": -3.0}
+{"ts": "2026-04-02T08:56:41.953128+00:00", "event": "trade_result", "symbol": "", "pnl_pct": -1.0, "daily_pnl": -1.0}
+{"ts": "2026-04-02T08:56:41.955701+00:00", "event": "trade_result", "symbol": "", "pnl_pct": 2.0, "daily_pnl": 2.0}
+{"ts": "2026-04-02T09:00:00.010879+00:00", "event": "trade_result", "symbol": "", "pnl_pct": 1.7399360881433044, "daily_pnl": 1.7399360881433044}
+{"ts": "2026-04-02T09:00:00.012369+00:00", "event": "trade_result", "symbol": "", "pnl_pct": -0.10027997236203567, "daily_pnl": 1.6396561157812686}
+{"ts": "2026-04-02T09:00:00.020013+00:00", "event": "trade_result", "symbol": "", "pnl_pct": 1.7399360881433044, "daily_pnl": 1.7399360881433044}
+{"ts": "2026-04-02T09:00:00.021359+00:00", "event": "trade_result", "symbol": "", "pnl_pct": -0.10027997236203567, "daily_pnl": 1.6396561157812686}
+{"ts": "2026-04-02T09:00:00.029043+00:00", "event": "trade_result", "symbol": "", "pnl_pct": 1.7399360881433044, "daily_pnl": 1.7399360881433044}
+{"ts": "2026-04-02T09:00:00.030340+00:00", "event": "trade_result", "symbol": "", "pnl_pct": -0.10027997236203567, "daily_pnl": 1.6396561157812686}
+{"ts": "2026-04-02T09:00:00.099010+00:00", "event": "kill_switch", "symbol": "BTC/USDT", "price": 50000.0}
+{"ts": "2026-04-02T09:00:00.100698+00:00", "event": "trade_result", "symbol": "", "pnl_pct": -3.0, "daily_pnl": -3.0}
+{"ts": "2026-04-02T09:00:00.100808+00:00", "event": "daily_loss_limit", "symbol": "BTC/USDT", "daily_pnl": -3.0}
+{"ts": "2026-04-02T09:00:00.102827+00:00", "event": "trade_result", "symbol": "", "pnl_pct": -1.0, "daily_pnl": -1.0}
+{"ts": "2026-04-02T09:00:00.106543+00:00", "event": "trade_result", "symbol": "", "pnl_pct": 2.0, "daily_pnl": 2.0}
+{"ts": "2026-04-02T09:03:46.889457+00:00", "event": "trade_result", "symbol": "", "pnl_pct": 1.7399360881433044, "daily_pnl": 1.7399360881433044}
+{"ts": "2026-04-02T09:03:46.890938+00:00", "event": "trade_result", "symbol": "", "pnl_pct": -0.10027997236203567, "daily_pnl": 1.6396561157812686}
+{"ts": "2026-04-02T09:03:46.898607+00:00", "event": "trade_result", "symbol": "", "pnl_pct": 1.7399360881433044, "daily_pnl": 1.7399360881433044}
+{"ts": "2026-04-02T09:03:46.899954+00:00", "event": "trade_result", "symbol": "", "pnl_pct": -0.10027997236203567, "daily_pnl": 1.6396561157812686}
+{"ts": "2026-04-02T09:03:46.907685+00:00", "event": "trade_result", "symbol": "", "pnl_pct": 1.7399360881433044, "daily_pnl": 1.7399360881433044}
+{"ts": "2026-04-02T09:03:46.909025+00:00", "event": "trade_result", "symbol": "", "pnl_pct": -0.10027997236203567, "daily_pnl": 1.6396561157812686}
+{"ts": "2026-04-02T09:03:46.963271+00:00", "event": "kill_switch", "symbol": "BTC/USDT", "price": 50000.0}
+{"ts": "2026-04-02T09:03:46.964638+00:00", "event": "trade_result", "symbol": "", "pnl_pct": -3.0, "daily_pnl": -3.0}
+{"ts": "2026-04-02T09:03:46.964702+00:00", "event": "daily_loss_limit", "symbol": "BTC/USDT", "daily_pnl": -3.0}
+{"ts": "2026-04-02T09:03:46.965985+00:00", "event": "trade_result", "symbol": "", "pnl_pct": -1.0, "daily_pnl": -1.0}
+{"ts": "2026-04-02T09:03:46.968339+00:00", "event": "trade_result", "symbol": "", "pnl_pct": 2.0, "daily_pnl": 2.0}
+{"ts": "2026-04-02T09:04:55.468191+00:00", "event": "trade_result", "symbol": "", "pnl_pct": 1.7399360881433044, "daily_pnl": 1.7399360881433044}
+{"ts": "2026-04-02T09:04:55.469701+00:00", "event": "trade_result", "symbol": "", "pnl_pct": -0.10027997236203567, "daily_pnl": 1.6396561157812686}
+{"ts": "2026-04-02T09:04:55.477493+00:00", "event": "trade_result", "symbol": "", "pnl_pct": 1.7399360881433044, "daily_pnl": 1.7399360881433044}
+{"ts": "2026-04-02T09:04:55.478896+00:00", "event": "trade_result", "symbol": "", "pnl_pct": -0.10027997236203567, "daily_pnl": 1.6396561157812686}
+{"ts": "2026-04-02T09:04:55.486710+00:00", "event": "trade_result", "symbol": "", "pnl_pct": 1.7399360881433044, "daily_pnl": 1.7399360881433044}
+{"ts": "2026-04-02T09:04:55.488089+00:00", "event": "trade_result", "symbol": "", "pnl_pct": -0.10027997236203567, "daily_pnl": 1.6396561157812686}
+{"ts": "2026-04-02T09:04:55.542692+00:00", "event": "kill_switch", "symbol": "BTC/USDT", "price": 50000.0}
+{"ts": "2026-04-02T09:04:55.544125+00:00", "event": "trade_result", "symbol": "", "pnl_pct": -3.0, "daily_pnl": -3.0}
+{"ts": "2026-04-02T09:04:55.544201+00:00", "event": "daily_loss_limit", "symbol": "BTC/USDT", "daily_pnl": -3.0}
+{"ts": "2026-04-02T09:04:55.545489+00:00", "event": "trade_result", "symbol": "", "pnl_pct": -1.0, "daily_pnl": -1.0}
+{"ts": "2026-04-02T09:04:55.547882+00:00", "event": "trade_result", "symbol": "", "pnl_pct": 2.0, "daily_pnl": 2.0}
