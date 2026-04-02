@@ -8,5 +8,10 @@ numpy>=1.24
 # Exchange connectivity (free, open-source)
 ccxt>=4.0
 
+# Web dashboard
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.9
+
 # Testing
 pytest>=7.0
