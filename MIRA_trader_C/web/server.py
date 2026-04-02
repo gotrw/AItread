@@ -368,6 +368,13 @@ async def toggle_kill_switch() -> dict:
 # ─────────────────────────────────────────────────────────────
 # Bot start / stop
 # ─────────────────────────────────────────────────────────────
+
+# Allowlist map: user input → literal command-line value.
+# Using a dict lookup (not the raw user string) breaks CodeQL taint flow
+# and guarantees no command-line injection regardless of the input value.
+_MODE_MAP: dict = {"paper": "paper", "live": "live", "backtest": "backtest"}
+
+
 class BotStartRequest(BaseModel):
     mode: str = "paper"
 
@@ -377,9 +384,20 @@ async def bot_start(body: BotStartRequest, background_tasks: BackgroundTasks) ->
     global _bot_process, _bot_start_time
     if _bot_running():
         return {"ok": False, "message": "Bot is already running."}
+
+    # Resolve user input to a fixed literal from the allowlist map.
+    # This prevents command-line injection: only the dict's own string values
+    # ever reach the subprocess command array.
+    safe_mode: str | None = _MODE_MAP.get(body.mode)
+    if safe_mode is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid mode. Allowed: {sorted(_MODE_MAP)}",
+        )
+
     try:
         env = os.environ.copy()
-        cmd = [sys.executable, str(PROJECT_ROOT / "main.py"), "--mode", body.mode]
+        cmd = [sys.executable, str(PROJECT_ROOT / "main.py"), "--mode", safe_mode]
         _bot_process = subprocess.Popen(
             cmd,
             cwd=str(PROJECT_ROOT),
@@ -390,8 +408,8 @@ async def bot_start(body: BotStartRequest, background_tasks: BackgroundTasks) ->
         )
         _bot_start_time = time.time()
         background_tasks.add_task(_stream_subprocess_output)
-        await _broadcast("bot_status", {"running": True, "mode": body.mode})
-        return {"ok": True, "message": f"Bot started in {body.mode} mode.", "pid": _bot_process.pid}
+        await _broadcast("bot_status", {"running": True, "mode": safe_mode})
+        return {"ok": True, "message": f"Bot started in {safe_mode} mode.", "pid": _bot_process.pid}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
